@@ -469,3 +469,55 @@ public class WebConfig implements WebMvcConfigurer {
 
 
 
+## 스프링 부트 - 오류 페이지1
+
+지금까지의 과정을 보면 다음과 같다.
+
+* `WebServerCustomizer`를 만들어 에러 목록들을 만들고,
+* 예외 종류에 따라 `ErrorPage`를 추가하고,
+* 예외 처리용 컨트롤러 `ErrorPageController`를 만들었다.
+
+
+
+#### 스프링부트는 이런 과정을 모두 기본으로 제공한다.
+
+* `ErrorPage`를 자동으로 등록한다. 이때 `/error`라는 경로로 기본 오류 페이지를 설정한다.
+  * `new ErrorPage("/error")`, 상태코드와 예외를 설정하지 않으면 기본 오류 페이지로 사용된다.
+  * 서블릿 밖으로 예외가 발생하거나, `response.sendError(...)`가 호출되면 모든 오류는 `/error`를 호출한다.
+* [오류를 처리할 컨트롤러] - `BasicErrorController`라는 스프링 컨트롤러를 자동으로 등록한다.
+  * `ErrorPage`에서 등록한 `/error`를 매핑해서 처리하는 컨트롤러다.
+
+
+
+#### 뷰 선택 우선순위
+
+스프링부트가 에러페이지를 보여주는 롤은 따로 정해져 있는데 다음과 같다.
+
+`BasicErrorController` 의 처리 순서
+
+1. 뷰 템플릿
+   * `resources/templates/error/500.html`
+   * `resources/templates/error/5xx.html`
+2. 정적 리소스(static, public)
+   * `resources/static/error/400.html`
+   * `resources/static/error/404.html`
+   * `resources/static/error/4xx.html`
+3. 적용 대상이 없을 때 뷰 이름(error)
+   * `resources/templates/error.html`
+
+
+
+### 정리
+
+**개발자는 오류 페이지만 등록해하면 오류페이지를 구현할 수 있다.** 
+
+
+
+## 스프링 부트 - 오류 페이지2
+
+
+
+
+
+
+
