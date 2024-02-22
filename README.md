@@ -108,9 +108,86 @@ public class ServletExController {
 
 
 
+## 서블릿 예외 처리 - 오류 화면 제공
+
+과거에는 `web.xml` 파일에 오류 화면을 등록했지만, <u>지금은 스프링 부트를 통해 서블릿 컨테이너를 실행하기 때문에, 스프링 부트가 제공하는 기능을 사용해서 서블릿 오류 페이지를 등록하면 된다.</u>
 
 
 
+### 예제
+
+
+
+#### 처리 프로세스
+
+[서블릿 오류 페이지 등록]
+
+1. 예외나, `response.sendError`가 발생하게 되면 해당 컨트롤러를 타게 된다.
+
+* 이후 `ErrorPage` 클래스를 통해 **등록된 에러 컨트롤러 경로로 서버 내부에서 재요청을 하게 된다.**
+
+```java
+package hello.exception;
+
+import org.springframework.boot.web.server.ConfigurableWebServerFactory;
+import org.springframework.boot.web.server.ErrorPage;
+import org.springframework.boot.web.server.WebServerFactory;
+import org.springframework.boot.web.server.WebServerFactoryCustomizer;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Component;
+
+
+/**
+ * 서블릿 오류 페이지 등록
+ */
+@Component
+public class WebServerCustomizer implements WebServerFactoryCustomizer<ConfigurableWebServerFactory> {
+
+    @Override
+    public void customize(ConfigurableWebServerFactory factory) {
+        // `response.sendError(404)` : `errorPage404` 호출
+        ErrorPage errorPage404 = new ErrorPage(HttpStatus.NOT_FOUND, "/error-page/404");
+
+        // `response.sendError(500)` : `errorPage500` 호출
+        ErrorPage errorPage500 = new ErrorPage(HttpStatus.INTERNAL_SERVER_ERROR, "/error-page/500");
+
+        // `RuntimeException` 또는 그 자식 타입의 예외: `errorPageEx` 호출
+        ErrorPage errorPageEx = new ErrorPage(RuntimeException.class, "/error-page/500");
+        factory.addErrorPages(errorPage404, errorPage500, errorPageEx);
+    }
+}
+```
+
+
+
+[오류를 처리할 컨트롤러]
+
+```java
+package hello.exception.servlet;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.RequestMapping;
+
+@Slf4j
+@Controller
+public class ErrorPageController {
+
+    @RequestMapping("/error-page/404")
+    public String errorPage404(HttpServletRequest request, HttpServletResponse response) {
+        log.info("errorPage 404");
+        return "error-page/404";
+    }
+
+    @RequestMapping("/error-page/500")
+    public String errorPage500(HttpServletRequest request, HttpServletResponse response) {
+        log.info("errorPage 500");
+        return "error-page/500";
+    }
+}
+```
 
 
 
