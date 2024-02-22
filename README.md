@@ -46,11 +46,65 @@
 
 
 
+#### 예제
+
+먼저 WAS가 처리하는 방식을 알아보기 위해 스프링 부트가 제공하는 기본 예외 페이지를 꺼두자
+
+[`application.properties`]
+
+```java
+server.error.whitelabel.enabled=false
+```
 
 
 
+[서블릿 예외 컨트롤러]
+
+* `Exception`의 경우 서버 내부에서 처리할 수 없는 오류가 발생한 것으로 생각해서 HTTP 상태 코드를 500을 반환한다.
+
+```java
+package hello.exception.servlet;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.GetMapping;
+
+@Slf4j
+@Controller
+public class ServletExController {
+
+    @GetMapping("error-ex")
+    public void errorEx() {
+        throw new RuntimeException("예외 발생");
+    }
+}
+
+```
 
 
+
+### response.sendError(HTTP 상태 코드, 오류 메시지)
+
+오류가 발생했을 때 `HttpServletResponse`가 제공하는 `sendError`라는 메서드를 사용해도 된다.
+이것을 사용하면 당장 예외가 발생하는 것은 아니지만, <u>서블릿 컨테이너에게 오류가 발생했다는 것을 전달할 수 있다.</u>
+
+* response.sendError(HTTP 상태 코드)
+* response.sendError(HTTP 상태 코드, 오류 메시지)
+
+
+
+#### 예제
+
+[response.sendError]
+
+* 해당 메서드를 호출하면 `response` 내부에 오류가 발생했다는 상태를 저장함
+* 그리고 서블릿 컨테이너는 클라이언트에게 응답 전 response에 `sendError()`가 호출되었는지 확인 후, <u>호출 되었다면 설정한 오류 코드에 맞추어 기본 오류 페이지를 보여준다.</u>
+
+
+
+#### sendError 흐름
+
+* WAS(sendError 호출 기록 확인) <- 필터 <- 서블릿 <- 인터셉터 <- 컨트롤러(`response.sendError()`)
 
 
 
