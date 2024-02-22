@@ -232,19 +232,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 @Controller
 public class ErrorPageController {
 
-    //RequestDispatcher 상수로 정의되어 있음
-    // 예외
-    public static final String ERROR_EXCEPTION = "javax.servlet.error.exception";
-    // 예외 타입
-    public static final String ERROR_EXCEPTION_TYPE = "javax.servlet.error.exception_type";
-    // 오류 메시지
-    public static final String ERROR_MESSAGE = "javax.servlet.error.message";
-    // 클라이언트 요청 URI
-    public static final String ERROR_REQUEST_URI = "javax.servlet.error.request_uri";
-    // 오류가 발생한 서블릿 이름
-    public static final String ERROR_SERVLET_NAME = "javax.servlet.error.servlet_name";
-    // HTTP 상태코드
-    public static final String ERROR_STATUS_CODE = "javax.servlet.error.status_code";
+    public static final String ERROR_EXCEPTION = "jakarta.servlet.error.exception";
+    public static final String ERROR_EXCEPTION_TYPE = "jakarta.servlet.error.exception_type";
+    public static final String ERROR_MESSAGE = "jakarta.servlet.error.message";
+    public static final String ERROR_REQUEST_URI = "jakarta.servlet.error.request_uri";
+    public static final String ERROR_SERVLET_NAME = "jakarta.servlet.error.servlet_name";
+    public static final String ERROR_STATUS_CODE = "jakarta.servlet.error.status_code";
 
     @RequestMapping("/error-page/404")
     public String errorPage404(HttpServletRequest request, HttpServletResponse response) {
@@ -273,3 +266,76 @@ public class ErrorPageController {
 
 ```
 
+
+
+## 서블릿 예외 처리 - 필터
+
+#### 목표
+
+<u>서블릿이 제공</u>하는 `DispatchType` 이해하기
+
+
+
+#### 예외 발생과 오류 페이지 요청 흐름
+
+1. WAS(여기까지 전파) <- 필터 <- 서블릿 <- 인터셉터 <- 컨트롤러(예외발생)
+2. WAS `/error-page/500` 다시 요청 -> 필터 -> 서블릿 -> 인터셉터 -> 컨트롤러(/error-page/500) -> View
+
+
+
+#### 예외 발생 및 오류 페이지 처리를 위한 재호출의 문제점
+
+오류가 발생하면 위와 같이 WAS 내부에서 필터, 인터셉터 등이 다시 호출된다.
+하지만 이미 로그인 인증 체크 같은 경우 이미 처음 클라이언트가 요청했을 때 검증을 완료했는데 다시 한번 호출되는 것은 비효율적이다. 
+**따라서 클라이언트로부터 발생한 정상 요청인지, 아니면 오류 페이지를 출력하기 위한 내부 요청인지 구분할 수 있어야 한다.**
+서블릿은 이런 문제를 해결하기 위해 `DisPatcherType`이라는 추가 정보를 제공한다.
+
+
+
+### DispatcherType
+
+필터는 이런 경우를 위해 `DispatcherType` 옵션을 제공한다.
+
+```java
+public enum DispatcherType {
+     FORWARD, // 서블릿에서 다른 서블릿이나 JSP를 호출할 때
+     INCLUDE, // 서블릿에서 다른 서블릿이나 JSP의 결과를 포함할 때
+     REQUEST, // 클라이언트 요청
+     ASYNC, // 서블릿 비동기 호출
+     ERROR // 오류 요청
+}
+```
+
+
+
+[필터 등록 - WebConfig]
+
+* `filterRegistrationBean.setDispatcherTypes(DispatcherType.REQUEST,  DispatcherType.ERROR);` 
+  * <u>해당 메서드를 통해 어떤 타입의 요청인지를 구분해서 처리할 수 있다.</u> 
+  * 기본 값은 `REQUEST`이므로, <u>별도로 해당 메서드를 처리해주지 않는 이상 필터는 클라이언트의 요청만 처리한다.</u>
+
+```java
+package hello.exception;
+
+import hello.exception.filter.LogFilter;
+import jakarta.servlet.DispatcherType;
+import jakarta.servlet.Filter;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class WebConfig {
+
+    @Bean
+    public FilterRegistrationBean logFilter() {
+        FilterRegistrationBean<Filter> filterRegistrationBean = new FilterRegistrationBean<>();
+        filterRegistrationBean.setFilter(new LogFilter());
+        filterRegistrationBean.setOrder(1);
+        filterRegistrationBean.addUrlPatterns("/*");
+        filterRegistrationBean.setDispatcherTypes(DispatcherType.REQUEST, DispatcherType.ERROR);
+
+        return filterRegistrationBean;
+    }
+}
+```
