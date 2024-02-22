@@ -339,3 +339,133 @@ public class WebConfig {
     }
 }
 ```
+
+
+
+## 서블릿 예외 처리 - 인터셉터
+
+
+
+### 예제 - 인터셉터 중복 호출 제거
+
+[인터셉터 구현]
+
+* 로그에 `request.getDispatcherType` 추가
+
+```java
+package hello.exception.interceptor;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.servlet.HandlerInterceptor;
+import org.springframework.web.servlet.ModelAndView;
+
+import java.util.UUID;
+
+@Slf4j
+public class LogInterceptor implements HandlerInterceptor {
+
+    public static final String LOG_ID = "logId";
+
+    @Override
+    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
+        String requestURI = request.getRequestURI();
+        String uuid = UUID.randomUUID().toString();
+        request.setAttribute(LOG_ID, uuid);
+        // request.getDispatcherType 추가
+        log.info("REQUEST  [{}][{}][{}][{}]", uuid, request.getDispatcherType(), requestURI, handler);
+        return true;
+    }
+
+    @Override
+    public void postHandle(HttpServletRequest request, HttpServletResponse response, Object handler, ModelAndView modelAndView) throws Exception {
+        log.info("postHandle [{}]", modelAndView);
+    }
+
+    @Override
+    public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) throws Exception {
+        String requestURI = request.getRequestURI();
+        String logId = (String) request.getAttribute(LOG_ID);
+        // request.getDispatcherType 추가
+        log.info("RESPONSE [{}][{}][{}]", logId, request.getDispatcherType(), requestURI);
+        if (ex != null) {
+            log.error("afterCompletion error!!", ex);
+        }
+    }
+
+}
+```
+
+
+
+[인터셉터 등록 - WebConfig]
+
+* 앞서 필터에서는 서블릿이 제공하는 `DispatcherType` 이용해 어떤 타입인 경우에 따라 필터를 적용할 지 선택할 수 있었지만, 인터셉터는 스프링이 제공하는 기능이므로 `DispatcherType`과 무관하게 항상 호출된다.
+* 대신, 오류 페이지 경로를 `excludePathPatterns`를 사용해서 빼주면 된다.
+
+```java
+package hello.exception;
+
+import hello.exception.filter.LogFilter;
+import hello.exception.interceptor.LogInterceptor;
+import jakarta.servlet.DispatcherType;
+import jakarta.servlet.Filter;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+@Configuration
+public class WebConfig implements WebMvcConfigurer {
+
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
+        registry.addInterceptor(new LogInterceptor())
+                .order(1)
+                .addPathPatterns("/**") // 전체 경로
+                .excludePathPatterns(
+                        "/css/**", "/*.ico",
+                        "/error", "/error-page/**"
+                ); // 오류 페이지 경로
+    }
+
+//    @Bean
+    public FilterRegistrationBean logFilter() {
+        FilterRegistrationBean<Filter> filterRegistrationBean = new FilterRegistrationBean<>();
+        filterRegistrationBean.setFilter(new LogFilter());
+        filterRegistrationBean.setOrder(1);
+        filterRegistrationBean.addUrlPatterns("/*");
+        filterRegistrationBean.setDispatcherTypes(DispatcherType.REQUEST, DispatcherType.ERROR);
+
+        return filterRegistrationBean;
+    }
+}
+
+```
+
+
+
+### 전체 흐름 정리
+
+1. `/hello` 정상 요청
+
+   * WAS(/hello, dispatchType=REQUEST) -> 필터 -> 서블릿 -> 인터셉터 -> 컨트롤러 -> View
+
+2. `/error-ex` 오류 요청
+
+   * 필터는 `DispatchType` 으로 중복 호출 제거 ( `dispatchType=REQUEST` )
+
+   * 인터셉터는 경로 정보로 중복 호출 제거( `excludePathPatterns("/error-page/**")` )
+
+   * ```
+     1. WAS(/error-ex, dispatchType=REQUEST) -> 필터 -> 서블릿 -> 인터셉터 -> 컨트롤러
+     2. WAS(여기까지 전파) <- 필터 <- 서블릿 <- 인터셉터 <- 컨트롤러(예외발생)
+     3. WAS 오류 페이지 확인
+     4. WAS(/error-page/500, dispatchType=ERROR) -> 필터(x) -> 서블릿 -> 인터셉터(x) -> 컨트
+     롤러(/error-page/500) -> View
+     ```
+
+
+
