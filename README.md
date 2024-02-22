@@ -515,9 +515,50 @@ public class WebConfig implements WebMvcConfigurer {
 
 ## 스프링 부트 - 오류 페이지2
 
+### BasicErrorController가 제공하는 기본 정보들
+
+`BasicErrorController` 컨트롤러는 다음 정보를 model에 담아서 뷰에 전달한다. 
+뷰 템플릿은 이 값을 활용해서 출력할 수 있다.
+
+```
+* timestamp: Fri Feb 05 00:00:00 KST 2021
+* status: 400
+* error: Bad Request
+* exception: org.springframework.validation.BindException * trace: 예외 trace
+ * message: Validation failed for object='data'. Error count: 1
+ * errors: Errors(BindingResult)
+* path: 클라이언트 요청 경로 (`/hello`)
+```
 
 
 
+클라이언트에게 해당 정보들을 노출하는 것은 좋치 않으므로 스프링에서는 `BasicErrorController`의 오류 컨트롤러에서 다음 오류 정보를 `model`에 포함할지 선택할 수 있다.
+
+[`application.properties`]
+
+```
+# exception 포함 여부
+server.error.include-exception=false
+# message 포함 여부
+server.error.include-message=never
+# trace 포함 여부
+server.error.include-stacktrace=never
+# errors 포함 여부
+server.error.include-binding-errors=never
+```
 
 
 
+#### 스프링 부트 오류 관련 옵션
+
+* `server.error.whitelabel.enabled=true` : 오류 처리 화면을 못 찾을 시, 스프링 whitelabel 오
+
+  류 페이지 적용
+
+* `server.error.path=/error` : 오류 페이지 경로, 스프링이 자동 등록하는 서블릿 글로벌 오류 페이지 경로와 `BasicErrorController` 오류 컨트롤러 경로에 함께 사용된다.
+
+
+
+#### 확장 포인트
+
+* 에러 공통 처리 컨트롤러의 기능을 변경하고 싶으면 `ErrorController, BasicErrorController`의 상속 받아 기능을 구현하면 된다.
