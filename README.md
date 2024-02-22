@@ -123,8 +123,8 @@ public class ServletExController {
 [서블릿 오류 페이지 등록]
 
 1. 예외나, `response.sendError`가 발생하게 되면 해당 컨트롤러를 타게 된다.
-
-* 이후 `ErrorPage` 클래스를 통해 **등록된 에러 컨트롤러 경로로 서버 내부에서 재요청을 하게 된다.**
+2. 이후 `ErrorPage` 클래스를 통해 **등록된 에러 컨트롤러 경로로 서버 내부에서 재요청을 하게 된다.**
+   * WAS는 해당 예외를 처리하는 오류 페이지 정보를 확인한다.
 
 ```java
 package hello.exception;
@@ -190,4 +190,86 @@ public class ErrorPageController {
 ```
 
 
+
+## 서블릿 예외 처리 - 오류 페이지 작동 원리
+
+### 예외 발생과 오류 페이지 요청 흐름
+
+1. WAS(여기까지 전파) <- 필터 <- 서블릿 <- 인터셉터 <- 컨트롤러(예외발생)
+2. WAS `/error-page/500` 다시 요청 -> 필터 -> 서블릿 -> 인터셉터 -> 컨트롤러(/error-page/500) -> View
+
+
+
+**중요한 점은 클라이언트는 서버 내부에서 이런 일이 일어나는지 전혀 알지 못한다. 오직 서버 내부에서 오류 페이지를 찾기 위해 추가적인 호출을 한다.**
+
+
+
+#### 중간 정리
+
+1. 예외가 발생해서 WAS까지 전파된다.
+2. WAS는 오류 페이지 경로를 찾아 내부에서 오류 페이지를 호출한다. 이때 오류 페이지 경로로 필터, 서블릿, 인터셉터, 컨트롤러가 모두 다시 호출된다.
+
+
+
+#### 오류 정보 추가
+
+**WAS는 오류 페이지를 단순히 다시 요청만 하는 것이 아니라, 오류 정보를 `request.attribute`에 추가해서 넘겨준다.**
+
+> 이외에도 다양한 정보를 넘겨준다.
+
+[오류를 처리할 컨트롤러]
+
+```java
+package hello.exception.servlet;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.RequestMapping;
+
+@Slf4j
+@Controller
+public class ErrorPageController {
+
+    //RequestDispatcher 상수로 정의되어 있음
+    // 예외
+    public static final String ERROR_EXCEPTION = "javax.servlet.error.exception";
+    // 예외 타입
+    public static final String ERROR_EXCEPTION_TYPE = "javax.servlet.error.exception_type";
+    // 오류 메시지
+    public static final String ERROR_MESSAGE = "javax.servlet.error.message";
+    // 클라이언트 요청 URI
+    public static final String ERROR_REQUEST_URI = "javax.servlet.error.request_uri";
+    // 오류가 발생한 서블릿 이름
+    public static final String ERROR_SERVLET_NAME = "javax.servlet.error.servlet_name";
+    // HTTP 상태코드
+    public static final String ERROR_STATUS_CODE = "javax.servlet.error.status_code";
+
+    @RequestMapping("/error-page/404")
+    public String errorPage404(HttpServletRequest request, HttpServletResponse response) {
+        log.info("errorPage 404");
+        printErrorInfo(request);
+        return "error-page/404";
+    }
+
+    @RequestMapping("/error-page/500")
+    public String errorPage500(HttpServletRequest request, HttpServletResponse response) {
+        log.info("errorPage 500");
+        printErrorInfo(request);
+        return "error-page/500";
+    }
+
+    private void printErrorInfo(HttpServletRequest request) {
+        log.info("ERROR_EXCEPTION : {}", request.getAttribute(ERROR_EXCEPTION));
+        log.info("ERROR_EXCEPTION_TYPE : {}", request.getAttribute(ERROR_EXCEPTION_TYPE));
+        log.info("ERROR_MESSAGE : {}", request.getAttribute(ERROR_MESSAGE));
+        log.info("ERROR_REQUEST_URI : {}", request.getAttribute(ERROR_REQUEST_URI));
+        log.info("ERROR_SERVLET_NAME : {}", request.getAttribute(ERROR_SERVLET_NAME));
+        log.info("ERROR_STATUS_CODE : {}", request.getAttribute(ERROR_STATUS_CODE));
+        log.info("dispatchType : {}", request.getDispatcherType());
+    }
+}
+
+```
 
