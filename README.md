@@ -9,6 +9,7 @@
 ## 해당 프로젝트에서 배우는 내용
 
 * 섹션 8 | 예외 처리와 오류 페이지
+* 섹션 9 | API 예외 처리
 
 
 
@@ -562,3 +563,41 @@ server.error.include-binding-errors=never
 #### 확장 포인트
 
 * 에러 공통 처리 컨트롤러의 기능을 변경하고 싶으면 `ErrorController, BasicErrorController`의 상속 받아 기능을 구현하면 된다.
+
+
+
+# 섹션 9 | API 예외 처리
+
+## API 예외 처리 - 시작
+
+API 방식으로 요청했을 때 에러가 발생하게 되면, HTML이 아닌 API의 JSON 형식으로 데이터가 반환되어야한다.
+
+
+
+### 예제
+
+[`ErrorPageConntroller`]
+
+* `produces = MediaType.APPLICATION_JSON_VALUE` 의 뜻은 클라이언트가 요청하는 HTTP Header의 Accept 의 값이 `application/json` 일 때 해당 메서드가 호출된다는 것이다
+
+```java
+/**
+ * 파라미터 produces: 클라이언트가 요청하는 HTTP Header의 Accept 값이 application/json일 때 해당 메서드가 호출된다.
+ */
+@RequestMapping(value = "/error-page/500", produces = MediaType.APPLICATION_JSON_VALUE)
+public ResponseEntity<Map<String, Object>> errorPage500Api(HttpServletRequest request, HttpServletResponse response) {
+    log.info("API errorPage 500");
+
+    Map<String, Object> result = new HashMap<>();
+    Exception ex = (Exception) request.getAttribute(ERROR_EXCEPTION);
+    result.put("status", request.getAttribute(ERROR_STATUS_CODE));
+    result.put("message", ex.getMessage());
+
+    Integer statusCode  = (Integer) request.getAttribute(RequestDispatcher.ERROR_STATUS_CODE);
+    return new ResponseEntity<>(result, HttpStatus.valueOf(statusCode));
+
+}
+```
+
+
+
