@@ -601,3 +601,35 @@ public ResponseEntity<Map<String, Object>> errorPage500Api(HttpServletRequest re
 
 
 
+## API 예외 처리 - 스프링 부트 기본 오류 처리
+
+API 예외 처리도 스프링부트가 제공하는 기본 오류 방식을 사용할 수 있다
+`BasicErrorController`가 동일하게 그 역할을 수행한다.
+
+* errorHtml은 클라이언트의 Accept 헤더 값이 `text/html`인 경우 view를 제공한다.
+
+```java
+ @RequestMapping(produces = MediaType.TEXT_HTML_VALUE)
+ public ModelAndView errorHtml(HttpServletRequest request, HttpServletResponse
+ response) {}
+ @RequestMapping
+ public ResponseEntity<Map<String, Object>> error(HttpServletRequest request) {}
+```
+
+
+
+테스트를 위해 `WebServerCustomizer`의 `@Component` 주석 처리 후 테스트를 진행하자.
+
+* <u>스프링 부트는 `BasicErrorController` 가 제공하는 기본 정보들을 활용해서 오류 API를 생성해준다.</u>
+* `BasicErrorController`를 확장하면 JSON 메시지도 변경할 수 있지만 나중에 나올 `@ExceptionHandler`를 사용하는 것이 더 나은 방법이다.
+* <u>따라서 이 방법은 HTML 화면을 처리할 때 사용하자</u>
+
+```
+{
+    "timestamp": "2024-02-24T03:56:57.284+00:00",
+    "status": 500,
+    "error": "Internal Server Error",
+    "path": "/api/members/ex"
+}
+```
+
