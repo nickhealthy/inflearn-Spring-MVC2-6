@@ -635,3 +635,127 @@ API 예외 처리도 스프링부트가 제공하는 기본 오류 방식을 사
 }
 ```
 
+
+
+## API 예외 처리 - HandlerExceptionResolver 시작
+
+예외가 발생햇을 때 서블릿을 넘어 WAS까지 예외가 전달되면 HTTP 상태코드가 무조건 500으로 처리된다.
+<u>발생하는 예외에 따라 400, 404 등 다른 상태로 처리하고, 오류 메시지나 형식을 다르게 처리하고 싶을 때 사용한다.</u>
+
+
+
+### HandlerExceptionResolver
+
+스프링 MVC는 컨트롤러(핸들러) 밖으로 예외가 던져진 경우 예외를 해결하고, 동작을 새로 정의할 수 있는 방법을 제공한다.
+컨트롤러 밖으로 던져진 에러를 해결하고, 동작하는 방식을 변경하고 싶으면 `HandlerExceptionResolver`를 사용하면된다.
+
+
+
+<img width="748" alt="스크린샷 2024-02-25 오후 1 22 05" src="https://github.com/nickhealthy/inflearn-Spring-MVC2-6/assets/66216102/8c0a3580-3a7c-41ff-82c4-f14784334a20">
+
+
+
+#### HandlerExceptionResolver - 인터페이스
+
+* `handler` : 핸들러(컨트롤러) 정보
+*  `Exception ex` : 핸들러(컨트롤러)에서 발생한 발생한 예외
+
+```java
+public interface HandlerExceptionResolver {
+  ModelAndView resolveException (HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex);
+}
+```
+
+
+
+### 예제
+
+만약 사용자가 입력을 잘못하여  `IllegalArgumentException` 예외가 발생하게 되면 500에러가 아닌, 400에러로 바꾸는 예제이다.
+
+* <u>`ExceptionResolver` 가 `ModelAndView` 를 반환하는 이유는 마치 try, catch를 하듯이, `Exception` 을 처리해서 정상 흐름 처럼 변경하는 것이 목적이다.</u> 이름 그대로 `Exception` 을 Resolver(해결)하는 것이 목적이다.
+
+```java
+package hello.exception.resolver;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.servlet.HandlerExceptionResolver;
+import org.springframework.web.servlet.ModelAndView;
+
+@Slf4j
+public class MyHandlerExceptionResolver implements HandlerExceptionResolver {
+
+    @Override
+    public ModelAndView resolveException(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) {
+        try {
+            if (ex instanceof IllegalAccessException) {
+                log.info("IllegalAccessException resolver to 400");
+                response.sendError(HttpServletResponse.SC_BAD_REQUEST, ex.getMessage());
+
+                return new ModelAndView();
+            }
+        } catch (Exception e) {
+            log.error("resolver ex", e);
+        }
+
+        return null;
+    }
+}
+```
+
+
+
+* `WebMvcConfigurer`를 통해 등록
+
+```java
+@Configuration
+public class WebConfig implements WebMvcConfigurer {
+
+    @Override
+    public void extendHandlerExceptionResolvers(List<HandlerExceptionResolver> resolvers) {
+        resolvers.add(new MyHandlerExceptionResolver());
+    }
+}
+```
+
+
+
+#### 결과 값
+
+```
+{
+    "timestamp": "2024-02-25T04:33:51.209+00:00",
+    "status": 400,
+    "error": "Bad Request",
+    "path": "/api/members/bad"
+}
+```
+
+
+
+#### 반환 값에 따른 동작 방식
+
+`HandlerExceptionResolver` 의 반환 값에 따른 **`DispatcherServlet` 의 동작 방식은 다음과 같다.**
+
+* 빈 ModelAndView: 뷰를 렌더링 하지 않고, 정상 흐름으로 서블릿이 리턴된다.
+* ModelAndVIew: 뷰를 렌더링 한다.
+* null: null을 반환하면, 다음 `ExceptionResolver`를 찾아 실행한다. 만약 처리할 수 있는 `ExceptionResolver` 가 없으면 예외 처리가 안되고, 기존에 발생한 예외를 서블릿 밖으로 던진다.
+
+
+
+#### ExceptionResolver 활용
+
+* 예외 상태 코드 변환
+  * 예외를 `response.sendError(xxx)` 호출로 변경해서 서블릿에서 상태 코드에 따른 오류를 처리 하도록 위임
+  * 이후 WAS는 서블릿 오류 페이지를 찾아서 내부 호출, 예를 들어서 스프링 부트가 기본으로 설정한 `/ error` 가 호출됨
+    * 방금 위의 예제에서는 `BasicErrorController`를 사용해서 오류 페이지를 처리함
+
+* 뷰 템플릿 처리
+  *  `ModelAndView` 에 값을 채워서 예외에 따른 새로운 오류 화면 뷰 렌더링 해서 고객에게 제공
+
+* API 응답 처리
+  *  `response.getWriter().println("hello");` 처럼 HTTP 응답 바디에 직접 데이터를 넣어주는 것도 가능하다. 여기에 JSON 으로 응답하면 API 응답 처리를 할 수 있다.
+
+
+
