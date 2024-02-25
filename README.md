@@ -618,6 +618,8 @@ API 예외 처리도 스프링부트가 제공하는 기본 오류 방식을 사
 
 
 
+### 스프링부트가 제공하는 기본 오류 방식 - BasicErrorController
+
 테스트를 위해 `WebServerCustomizer`의 `@Component` 주석 처리 후 테스트를 진행하자.
 
 * <u>스프링 부트는 `BasicErrorController` 가 제공하는 기본 정보들을 활용해서 오류 API를 생성해준다.</u>
