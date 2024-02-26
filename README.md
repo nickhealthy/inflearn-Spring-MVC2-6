@@ -749,7 +749,7 @@ public class WebConfig implements WebMvcConfigurer {
 * 예외 상태 코드 변환
   * 예외를 `response.sendError(xxx)` 호출로 변경해서 서블릿에서 상태 코드에 따른 오류를 처리 하도록 위임
   * 이후 WAS는 서블릿 오류 페이지를 찾아서 내부 호출, 예를 들어서 스프링 부트가 기본으로 설정한 `/ error` 가 호출됨
-    * 방금 위의 예제에서는 `BasicErrorController`를 사용해서 오류 페이지를 처리함
+    * <u>방금 위의 예제에서는 `BasicErrorController`를 사용해서 오류 페이지를 처리함</u>
 
 * 뷰 템플릿 처리
   *  `ModelAndView` 에 값을 채워서 예외에 따른 새로운 오류 화면 뷰 렌더링 해서 고객에게 제공
@@ -759,3 +759,169 @@ public class WebConfig implements WebMvcConfigurer {
 
 
 
+## API 예외 처리 - HandlerExceptionResolver 활용
+
+#### 예외를 ExceptionResolver에서 마무리 하기
+
+이때까지 예외가 발생하게 되면 WAS까지 예외가 던져지고, WAS에서 오류 페이지 정보를 찾아 다시 `/error`(스프링부트가 기본으로 사용하는 오류 페이지 경로)를 호출하는 과정은 복잡하다.
+<u>`ExceptionResolver`를 활용하면 예외가 발생하였을 때 여기서 바로 해결할 수 있다.</u>
+
+
+
+### 예제
+
+* 사용자 오류 정의
+
+```java
+package hello.exception.exception;
+
+public class UserException extends RuntimeException {
+    public UserException() {
+        super();
+    }
+
+    public UserException(String message) {
+        super(message);
+    }
+
+    public UserException(String message, Throwable cause) {
+        super(message, cause);
+    }
+
+    public UserException(Throwable cause) {
+        super(cause);
+    }
+
+    protected UserException(String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
+        super(message, cause, enableSuppression, writableStackTrace);
+    }
+}
+```
+
+
+
+* 예외 컨트롤러 추가
+
+```java
+package hello.exception.api;
+
+import hello.exception.exception.UserException;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@Slf4j
+@RestController
+public class ApiExceptionController {
+
+    @GetMapping("/api/members/{id}")
+    public MemberDto getMember(@PathVariable("id") String id) {
+				...
+        if (id.equals("user-ex")) {
+            throw new UserException("사용자 오류");
+        }
+				
+        return new MemberDto(id, "hello" + id);
+    }
+
+    @Data
+    @AllArgsConstructor
+    static class MemberDto {
+        private String memberId;
+        private String name;
+    }
+}
+
+```
+
+
+
+* `UserException`를 처리하는 `ExceptionResolver`
+  * `String acceptHeader = request.getHeader("accept");` 를 통해 헤더 정보를 보고 JSON, HTML를 적절하게 처리해준다.
+
+```java
+package hello.exception.resolver;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import hello.exception.exception.UserException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.servlet.HandlerExceptionResolver;
+import org.springframework.web.servlet.ModelAndView;
+
+import java.util.HashMap;
+import java.util.Map;
+
+@Slf4j
+public class UserHandlerExceptionResolver implements HandlerExceptionResolver {
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @Override
+    public ModelAndView resolveException(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) {
+        try {
+            if (ex instanceof UserException) {
+                log.info("UserException resolver to 400");
+                String acceptHeader = request.getHeader("accept");
+                response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+
+                if ("application/json".equals(acceptHeader)) {
+                    Map<String, Object> errorResult = new HashMap<>();
+                    errorResult.put("ex", ex.getClass());
+                    errorResult.put("message", ex.getMessage());
+
+                    String result = objectMapper.writeValueAsString(errorResult);
+
+                    response.setContentType("application/json");
+                    response.setCharacterEncoding("utf-8");
+                    response.getWriter().write(result);
+                    return new ModelAndView();
+                } else {
+                    // TEXT/HTML
+                    return new ModelAndView("error/400");
+                }
+            }
+        } catch (Exception e) {
+            log.error("resolver ex", e);
+        }
+
+        return null;
+    }
+}
+```
+
+
+
+#### 결과
+
+* accept: application/json인 경우
+
+```json
+{
+    "ex": "hello.exception.exception.UserException",
+    "message": "사용자 오류"
+}
+```
+
+
+
+* accept: text/html인 경우
+
+```html
+ <!DOCTYPE HTML>
+ <html>
+ ...
+ </html>
+```
+
+
+
+#### 정리
+
+* `ExceptionResolver`를 사용하면 컨트롤러에서 예외가 발생해도 예외는 이곳에서 모두 처리되고, 서블릿 컨테이너까지 예외가 전달되지 않는다. 서블릿은 정상 응답을 해주고 예외 처리가 끝이난다.
+* 즉, 서블릿 컨테이너까지 예외가 올라가서 복잡하고 지저분하게 추가 프로세스가 처리되지 않는 것이다.
