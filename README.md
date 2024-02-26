@@ -1016,3 +1016,55 @@ public class BadRequestException extends RuntimeException {
  IllegalArgumentException());
  }
 ```
+
+
+
+## API 예외 처리 - 스프링이 제공하는 ExceptionResolver2
+
+<u>`DefaultHandlerExceptionResolver`는 스프링 내부에서 발생하는 스프링 예외를 해결한다.</u>
+대표적으로 파라미터 바인딩 시점에 타입이 맞지 않으면 내부에서 `TypeMismatchException`이 발생하게 되는데, 이 경우 예외가 발생했기 때문에 서블릿 컨테이너까지 오류가 올라가고, 500 오류가 발생하게 되지만, 해당 예외처리로 인해 HTTP 상태 코드를 400오류로 변경하게 된다.
+
+* <u>해당 오류 처리도 `sendError(400)`를 호출했기 때문에 WAS에서 다시 오류 페이지를 내부에 요청한다.</u>
+
+
+
+### 예제 - DefaultHandlerExceptionResolver
+
+```java
+ @GetMapping("/api/default-handler-ex")
+ public String defaultException(@RequestParam Integer data) {
+     return "ok";
+ }
+```
+
+
+
+#### 실행결과
+
+```json
+{
+    "timestamp": "2024-02-26T08:40:35.920+00:00",
+    "status": 400,
+    "error": "Bad Request",
+    "message": "Failed to convert value of type 'java.lang.String' to required type 'java.lang.Integer'; For input string: \"hello\"",
+    "path": "/api/default-handler-ex"
+}
+```
+
+
+
+### 정리 - ExceptionResolver
+
+1. `ResponseStatusExceptionResolver`: HTTP 응답 코드 변경
+2. `DefaultHandlerExceptionResolver`: 스프링 내부 예외 처리
+3. `ExceptionHandlerExceptionResolver`: 다음 강의에서..
+   * `HandlerExceptionResolver`를 직접 구현해서 사용하는 것은 복잡헀음
+   * ModelAndView를 반환해야 하는 것도 API 형식에는 맞지 않았음
+   * 따라서 응답 바디에 데이터를 넣어주기 위해 `response.여러 메소드`를 사용하여(기존 서블릿 처리 방식처럼) 응답해줬음
+
+
+
+
+
+
+
