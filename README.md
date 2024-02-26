@@ -842,6 +842,7 @@ public class ApiExceptionController {
 
 * `UserException`를 처리하는 `ExceptionResolver`
   * `String acceptHeader = request.getHeader("accept");` 를 통해 헤더 정보를 보고 JSON, HTML를 적절하게 처리해준다.
+  * 응답데이터를 HTTP 바디에 직접 넣어주기 위해 `response.메소드`를 사용해서 처음 서블릿의 응답을 사용할 때처럼 구현되었다.(인터페이스를 구현해서 사용하므로 `ModelAndView` return을 해결할 수 없다.)
 
 ```java
 package hello.exception.resolver;
@@ -925,3 +926,93 @@ public class UserHandlerExceptionResolver implements HandlerExceptionResolver {
 
 * `ExceptionResolver`를 사용하면 컨트롤러에서 예외가 발생해도 예외는 이곳에서 모두 처리되고, 서블릿 컨테이너까지 예외가 전달되지 않는다. 서블릿은 정상 응답을 해주고 예외 처리가 끝이난다.
 * 즉, 서블릿 컨테이너까지 예외가 올라가서 복잡하고 지저분하게 추가 프로세스가 처리되지 않는 것이다.
+
+
+
+## API 예외 처리 - 스프링이 제공하는 ExceptionResolver1
+
+스프링이 기본으로 제공하는 `ExceptionResolver`는 다음과 같다.
+`HandlerExceptionResolverComposite` 에 다음 순서로 등록한다.
+
+1. `ExceptionHandlerExceptionResolver`(가장 중요)
+2. `ResponseStatusExceptionResolver`
+3. `DefaultHandlerExceptionResolver` 우선순위가가장낮다.
+
+
+
+#### ExceptionHandlerExceptionResolver
+
+`@ExceptionHHandler`을 처리한다. API 예외 처리는 대부분 이 기능으로 해결한다.
+
+
+
+#### ResponseStatusExceptionResolver
+
+HTTP 상태 코드를 지정해준다.
+
+
+
+#### DefaultHandlerExceptionResolver
+
+스프링 내부 기본 예외를 처리한다.
+
+
+
+### ResponseStatusExceptionResolver
+
+`ResponseStatusExceptionResolver` 는 예외에 따라서 HTTP 상태 코드를 지정해주는 역할을 한다.
+
+다음 두 가지의 경우를 처리한다.
+
+* `@ResponseStatus`가 달려있는 예외
+* `ResponseStatusException` 예외
+
+
+
+#### 예제 - @ResponseStatus
+
+* `BadRequestException` 예외가 컨트롤러 밖으로 넘어감녀 ResponseStatusExceptionResolver 예외가 해당 애노테이션을 확인해서 오류 코드를 400으로 변경하고, 메시지도 담는다.
+  * `ResponseStatusExceptionResolver`도 결국 `response.sendError(statusCode, resolvedReason)`를 호출해 이전에 했던 실습과 똑같다.
+  * <u>`sendError`를 호출했기 때문에 WAS에서 다시 오류 페이지를 내부에 요청한다.</u>
+* MessageSource 기능도 가능하다.
+
+```java
+ package hello.exception.exception;
+ import org.springframework.http.HttpStatus;
+ import org.springframework.web.bind.annotation.ResponseStatus;
+ 
+// @ResponseStatus(code = HttpStatus.BAD_REQUEST, reason = "잘못된 요청 오류") 
+@ResponseStatus(code = HttpStatus.BAD_REQUEST, reason = "error.bad") // MessageSource 기능
+public class BadRequestException extends RuntimeException {
+}
+```
+
+
+
+* 결과
+
+```json
+ {
+    "status": 400,
+    "error": "Bad Request",
+    "exception": "hello.exception.exception.BadRequestException",
+    "message": "잘못된 요청 오류",
+    "path": "/api/response-status-ex1"
+}
+```
+
+
+
+#### 예제 - ResponseStatusException
+
+위에서 살펴본 `@ResponseStatus`는 라이브러리 등 개발자가 직접 변경할 수 없는 예외에는 적용할 수 없다.
+추가로 애노테이션을 사용하기 때문에 조건에 따라 분기 처리도 불가능하다.
+이때 사용하는 것이 `ResponseStatusException` 예외를 사용하면 된다.
+
+```java
+ @GetMapping("/api/response-status-ex2")
+ public String responseStatusEx2() {
+     throw new ResponseStatusException(HttpStatus.NOT_FOUND, "error.bad", new
+ IllegalArgumentException());
+ }
+```
