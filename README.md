@@ -1042,6 +1042,7 @@ public class BadRequestException extends RuntimeException {
 #### 실행결과
 
 ```json
+
 {
     "timestamp": "2024-02-26T08:40:35.920+00:00",
     "status": 400,
@@ -1064,7 +1065,182 @@ public class BadRequestException extends RuntimeException {
 
 
 
+## API 예외 처리 - @ExceptionHandler
 
+지금까지 살펴본 `BasicErrorController` 를 사용하거나 `HandlerExceptionResolver` 를 직접 구현하는 방식으로 API 예외를 다루기는 쉽지 않다. 
+
+* API는 각 시스템 마다 응답의 모양이 다르고, 스펙도 모두 다르다.
+* 예외에 따라 각각의 다른 데이터를 출력해야 할 수도 있다.
+* 같은 예외라 해도 어떤 컨트롤러에서 발생했는가에 따라 다른 예외 응답을 내려주어야 할 수 있다.
+
+
+
+#### API 예외처리의 어려운 점
+
+* `HandlerExceptionResolver`는 `ModelAndView`을 반환해야한다. 이것은 API 응답에 필요하지 않다.
+  * 따라서 `HttpServletResponse`에 직접 응답 데이터를 넣어주었고, 빈 `ModelAndView`를 반환해서 정상처리 동작이 된 것처럼 만들어야 하는 수고가 있다.
+* 특정 컨트롤러에서만 발생하는 예외를 별도로 처리하기 어렵다.
+
+
+
+#### @ExceptionHandler
+
+스프링은 API 예외 처리 문제를 해결하기 위해 `@ExceptionHandler`라는 애노테이션을 사용하는 매우 편리한 예외 처리 기능을 제공한다. 이것이 바로 `ExceptionHandlerExceptionResolver` 이다.
+
+
+
+### 예제 - @ExceptionHandler
+
+[`ErrorResult`]
+
+* 예외가 발생했을 때 API 응답으로 사용하는 객체를 정의
+
+```java
+package hello.exception.exhandler;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+
+@Data
+@AllArgsConstructor
+public class ErrorResult {
+   private String code;
+   private String message;
+}
+```
+
+
+
+[`ApiExceptionV2Controller`]
+
+`@ExceptionHandler` 예외 처리 방법
+
+* 해당 애너테이션을 선언하고, 컨트롤러에서 처리하고 싶은 예외를 지정해주면 된다. 
+  * 해당 컨트롤럴에서 예외가 발생하면 이 메서드가 호출된다.
+
+```java
+package hello.exception.exhandler;
+
+import hello.exception.exception.UserException;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+@Slf4j
+@RestController
+public class ApiExceptionV2Controller {
+
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ErrorResult illegalExHandle(IllegalArgumentException e) {
+        log.error("[exceptionHandle] ex", e);
+        return new ErrorResult("BAD", e.getMessage());
+    }
+
+    @ExceptionHandler
+    public ResponseEntity<ErrorResult> userExHandle(UserException e) {
+        log.error("[exceptionHandle] ex", e);
+        ErrorResult errorResult = new ErrorResult("USER-EX", e.getMessage());
+        return new ResponseEntity<>(errorResult, HttpStatus.BAD_REQUEST);
+    }
+
+    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+    @ExceptionHandler
+    public ErrorResult exHandle(Exception e) {
+        log.error("[exceptionHandle] ex", e);
+        return new ErrorResult("EX", "내부 오류");
+    }
+
+
+    @GetMapping("/api2/members/{id}")
+    public MemberDto getMember(@PathVariable("id") String id) {
+
+        if (id.equals("ex")) {
+            throw new RuntimeException("잘못된 사용자");
+        }
+
+        if (id.equals("bad")) {
+            throw new IllegalArgumentException("잘못된 입력 값");
+        }
+
+        if (id.equals("user-ex")) {
+            throw new UserException("사용자 오류");
+        }
+
+        return new MemberDto(id, "hello" + id);
+    }
+
+    @Data
+    @AllArgsConstructor
+    static class MemberDto {
+        private String memberId;
+        private String name;
+    }
+
+}
+```
+
+
+
+### 참고
+
+#### 다양한 예외
+
+다음과 같이 다양한 예외를 한번에 처리 가능
+
+```java
+@ExceptionHandler({AException.class, BException.class})
+public String ex(Exception e) {
+   log.info("exception e", e);
+}
+```
+
+
+
+#### 예외 생략
+
+* `@ExceptionHandler`에 예외를 생략 가능하다. 생략하면 메서드 파라미터의 예외가 지정된다.
+
+```java
+@ExceptionHandler
+public ResponseEntity<ErrorResult> userExHandle(UserException e) {}
+```
+
+
+
+#### HTML 오류 화면
+
+다음과 같이 `ModelAndView` 를 사용해서 오류 화면(HTML)을 응답하는데 사용할 수도 있다.
+
+```java
+@ExceptionHandler(ViewException.class)
+public ModelAndView ex(ViewException e) {
+   log.info("exception e", e);
+   return new ModelAndView("error");
+}
+```
+
+
+
+### 실행 흐름 예시
+
+```java
+@ResponseStatus(HttpStatus.BAD_REQUEST)
+@ExceptionHandler(IllegalArgumentException.class)
+public ErrorResult illegalExHandle(IllegalArgumentException e) {
+   log.error("[exceptionHandle] ex", e);
+   return new ErrorResult("BAD", e.getMessage());
+}
+```
+
+* 컨트롤러를 호출한 결과 `IllegalArgumentException` 예외가 컨트롤러 밖으로 던져진다.
+* 예외가 발생했으므로 `ExceptionResolver`가 작동한다. 가장 우선순위가 높은 `ExceptionHandlerExceptionResolver`가 실행된다.
+* `ExceptionHandlerExceptionResolver`는 해당 컨트롤러에 `IllegalArgumentException`을 처리할 수 있는 `@ExceptionHandler`를 확인한다.
+* `illegalExHandle()`를 실행한다. `@RestController`이므로 HTTP 컨버터가 사용되고, JSON 형태로 변환된다.
+  * `ResponseEntity` 를 사용해서 HTTP 메시지 바디에 직접 응답한다. `ResponseEntity` 를 사용하면 HTTP 응답 코드를 프로그래밍해서 동적으로 변경할 수 있다.
+* `@ResponseStatus(HttpStatus.Bad_REQUEST)`를 지정했으므로 HTTP 상태 코드 400으로 응답한다.
 
 
 
