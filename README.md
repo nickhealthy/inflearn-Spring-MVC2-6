@@ -1067,7 +1067,7 @@ public class BadRequestException extends RuntimeException {
 
 ## API 예외 처리 - @ExceptionHandler
 
-지금까지 살펴본 `BasicErrorController` 를 사용하거나 `HandlerExceptionResolver` 를 직접 구현하는 방식으로 API 예외를 다루기는 쉽지 않다. 
+<u>지금까지 살펴본 `BasicErrorController` 를 사용하거나 `HandlerExceptionResolver` 를 직접 구현하는 방식으로 API 예외를 다루기는 쉽지 않다.</u> 
 
 * API는 각 시스템 마다 응답의 모양이 다르고, 스펙도 모두 다르다.
 * 예외에 따라 각각의 다른 데이터를 출력해야 할 수도 있다.
@@ -1244,3 +1244,109 @@ public ErrorResult illegalExHandle(IllegalArgumentException e) {
 
 
 
+## API 예외 처리 - @ControllerAdvice
+
+`@ExceptionHandler` 를 사용해서 예외를 깔끔하게 처리할 수 있게 되었다.
+<u>하지만 정상 코드와 예외 처리 코드가 하나의 컨트롤러에 섞여 있다.</u> 
+`@ControllerAdvice` 또는 `@RestControllerAdvice` 를 사용하면 둘을 분리할 수 있다.
+
+
+
+### 예제 - 예외처리와 컨트롤러 분리
+
+[`ExControllerAdvice`]
+
+```java
+package hello.exception.exhandler.advice;
+
+import hello.exception.exception.UserException;
+import hello.exception.exhandler.ErrorResult;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+@Slf4j
+@RestControllerAdvice
+public class ExControllerAdvice {
+
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ErrorResult illegalExHandle(IllegalArgumentException e) {
+        log.error("[exceptionHandle] ex", e);
+        return new ErrorResult("BAD", e.getMessage());
+    }
+
+    @ExceptionHandler
+    public ResponseEntity<ErrorResult> userExHandle(UserException e) {
+        log.error("[exceptionHandle] ex", e);
+        ErrorResult errorResult = new ErrorResult("USER-EX", e.getMessage());
+        return new ResponseEntity<>(errorResult, HttpStatus.BAD_REQUEST);
+    }
+
+    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+    @ExceptionHandler
+    public ErrorResult exHandle(Exception e) {
+        log.error("[exceptionHandle] ex", e);
+        return new ErrorResult("EX", "내부 오류");
+    }
+
+}
+```
+
+
+
+### @ControllerAdvice
+
+* `@ControllerAdvice`는 대상으로 지정한 여러 컨트롤러에 `@ExceptionHandler` , `@InitBinder` 기능을 부여해주는 역할을 한다.
+* ` @ControllerAdvice`에 대상을 지정하지 않으면 모든 컨트롤러에 적용된다. (글로벌 적용)
+* `@RestControllerAdvice` 는 `@ControllerAdvice` 와 같고, `@ResponseBody` 가 추가되어 있다.
+
+
+
+> `@ControllerAdvice` 
+>
+> 스프링 프레임워크에서 <u>전역적으로 적용되는 컨트롤러에 대한 설정과 도움말을 제공하는 어노테이션</u>이다. 
+> 이 어노테이션을 사용하면 여러 컨트롤러에서 공통적으로 적용되는 설정을 중앙에서 관리할 수 있다.
+
+
+
+> `@InitBinder`
+>
+> 스프링 프레임워크에서 사용되는 어노테이션 중 하나로, 웹 요청의 데이터를 <u>컨트롤러의 메서드에 전달하기 전에 데이터를 바인딩하거나 검증하기 위해 사용된다.</u>
+>
+> 주로 폼 데이터나 요청 파라미터를 자바 객체로 변환할 때 사용된다. 이 어노테이션을 메서드에 적용하면, <u>해당 메서드는 컨트롤러에 정의된 모든 핸들러 메서드보다 먼저 호출되어 데이터 바인딩이나 검증을 수행할 수 있다.</u>
+
+
+
+#### 대상 컨트롤러 지정 방법
+
+아래와 같은 다양한 대상을 지정할 수 있다.
+
+* 전역 설정
+* 특정 어노테이션 설정
+* 패키지 설정
+* 특정 클래스 설정
+
+```java
+// Target all Controllers annotated with @RestController
+@ControllerAdvice(annotations = RestController.class)
+public class ExampleAdvice1 {}
+
+// Target all Controllers within specific packages
+@ControllerAdvice("org.example.controllers")
+public class ExampleAdvice2 {}
+
+// Target all Controllers assignable to specific classes
+@ControllerAdvice(assignableTypes = {ControllerInterface.class,
+AbstractController.class})
+public class ExampleAdvice3 {}
+```
+
+
+
+### 정리
+
+`@ExceptionHandler` 와 `@ControllerAdvice` 를 조합하면 예외를 깔끔하게 해결할 수 있다.
